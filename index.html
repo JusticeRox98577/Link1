@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code LiveShare Link</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        .container {
+            width: 90%;
+            max-width: 600px;
+            padding: 2rem;
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        h1 {
+            color: #0078d7;
+            margin-bottom: 1rem;
+        }
+        .section {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background-color: #3c3c3c;
+            border-radius: 8px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #0078d7;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            margin: 0.5rem;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .button:hover {
+            background-color: #0062ad;
+        }
+        .button.green {
+            background-color: #107c10;
+        }
+        .button.green:hover {
+            background-color: #0b5a0b;
+        }
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0 1rem;
+            background-color: #252525;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: white;
+            font-size: 1rem;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem;
+            background-color: #107c10;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+        .notification.error {
+            background-color: #e81123;
+        }
+        .visible {
+            opacity: 1;
+        }
+        .time {
+            font-size: 0.8rem;
+            color: #999;
+            margin-top: 0.5rem;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #setup-container {
+            display: none;
+        }
+        .config-input {
+            margin-bottom: 1rem;
+        }
+        .config-input label {
+            display: block;
+            margin-bottom: 0.5rem;
+            text-align: left;
+        }
+        #status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #999;
+            margin-right: 8px;
+        }
+        #status-indicator.connected {
+            background-color: #107c10;
+        }
+        #status-indicator.error {
+            background-color: #e81123;
+        }
+        .last-sync {
+            font-size: 0.8rem;
+            color: #999;
+            margin-top: 0.5rem;
+        }
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.8rem;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VS Code LiveShare Hub</h1>
+        
+        <div class="section">
+            <h2>Current Live Session</h2>
+            <div id="current-link-display">Loading session data...</div>
+            <div id="update-time" class="time"></div>
+            <div>
+                <a id="join-button" href="#" class="button" target="_blank" style="display: none;">Join Session</a>
+                <button id="copy-button" class="button" style="display: none;">Copy Link</button>
+                <button id="refresh-button" class="button">Refresh</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Update Session Link</h2>
+            <p>Start a LiveShare session in VS Code, copy the link, and paste it here:</p>
+            <input 
+                type="text" 
+                id="new-link-input" 
+                placeholder="https://prod.liveshare.vsengsaas.visualstudio.com/join?..."
+                autocomplete="off"
+            >
+            <button id="update-button" class="button green">
+                Update Session Link
+                <span id="loading-indicator" class="loading" style="display: none;"></span>
+            </button>
+        </div>
+        
+        <div class="section">
+            <div>
+                <span id="status-indicator"></span>
+                <span id="status-text">Checking repository connection...</span>
+            </div>
+            <div id="last-sync-time" class="last-sync"></div>
+            <button id="setup-config-button" class="button">Show Configuration</button>
+        </div>
+    </div>
+    
+    <div id="setup-container" class="container">
+        <h2>Repository Configuration</h2>
+        <p>Set up the connection to your GitHub repository:</p>
+        
+        <div class="config-input">
+            <label for="repo-owner">GitHub Username:</label>
+            <input type="text" id="repo-owner" placeholder="YourGitHubUsername">
+        </div>
+        
+        <div class="config-input">
+            <label for="repo-name">Repository Name:</label>
+            <input type="text" id="repo-name" placeholder="your-repository-name">
+        </div>
+        
+        <div class="config-input">
+            <label for="github-token">GitHub Personal Access Token:</label>
+            <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx">
+        </div>
+        
+        <div class="config-input">
+            <label for="file-path">Data File Path:</label>
+            <input type="text" id="file-path" value="liveshare-data.json">
+        </div>
+        
+        <button id="save-config-button" class="button green">Save Configuration</button>
+    </div>
+    
+    <div class="footer">
+        <p>Share this page URL with your team members to give them access to your Live Share sessions</p>
+    </div>
+    
+    <div id="notification" class="notification">Link updated successfully!</div>
+    
+    <script>
+        // Configuration elements
+        const setupConfigButton = document.getElementById('setup-config-button');
+        const setupContainer = document.getElementById('setup-container');
+        const repoOwnerInput = document.getElementById('repo-owner');
+        const repoNameInput = document.getElementById('repo-name');
+        const githubTokenInput = document.getElementById('github-token');
+        const filePathInput = document.getElementById('file-path');
+        const saveConfigButton = document.getElementById('save-config-button');
+        
+        // UI elements
+        const currentLinkDisplay = document.getElementById('current-link-display');
+        const updateTimeDisplay = document.getElementById('update-time');
+        const joinButton = document.getElementById('join-button');
+        const copyButton = document.getElementById('copy-button');
+        const newLinkInput = document.getElementById('new-link-input');
+        const updateButton = document.getElementById('update-button');
+        const refreshButton = document.getElementById('refresh-button');
+        const notification = document.getElementById('notification');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const lastSyncTime = document.getElementById('last-sync-time');
+        
+        // Configuration storage
+        let config = {
+            repoOwner: '',
+            repoName: '',
+            githubToken: '',
+            filePath: 'liveshare-data.json'
+        };
+        
+        // Load configuration from localStorage
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('liveShareConfig');
+            if (savedConfig) {
+                config = JSON.parse(savedConfig);
+                repoOwnerInput.value = config.repoOwner;
+                repoNameInput.value = config.repoName;
+                githubTokenInput.value = config.githubToken;
+                filePathInput.value = config.filePath;
+                return true;
+            }
+            return false;
+        }
+        
+        // Save configuration to localStorage
+        function saveConfig() {
+            config.repoOwner = repoOwnerInput.value.trim();
+            config.repoName = repoNameInput.value.trim();
+            config.githubToken = githubTokenInput.value.trim();
+            config.filePath = filePathInput.value.trim();
+            
+            if (!config.repoOwner || !config.repoName || !config.githubToken) {
+                showNotification('Please fill in all required fields', true);
+                return false;
+            }
+            
+            localStorage.setItem('liveShareConfig', JSON.stringify(config));
+            setupContainer.style.display = 'none';
+            checkRepositoryConnection();
+            return true;
+        }
+        
+        // Show notification
+        function showNotification(message, isError = false) {
+            notification.textContent = message;
+            notification.className = 'notification' + (isError ? ' error' : '');
+            notification.classList.add('visible');
+            setTimeout(() => {
+                notification.classList.remove('visible');
+            }, 3000);
+        }
+        
+        // Check repository connection
+        async function checkRepositoryConnection() {
+            if (!config.repoOwner || !config.repoName || !config.githubToken) {
+                statusIndicator.className = 'error';
+                statusText.textContent = 'Configuration not set up';
+                return false;
+            }
+            
+            statusIndicator.className = '';
+            statusText.textContent = 'Checking repository connection...';
+            
+            try {
+                // Try to fetch the file to verify connection
+                const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.filePath}`, {
+                    headers: {
+                        'Authorization': `token ${config.githubToken}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                
+                if (response.status === 200) {
+                    statusIndicator.className = 'connected';
+                    statusText.textContent = 'Connected to repository';
+                    localStorage.setItem('lastSyncTime', new Date().toISOString());
+                    lastSyncTime.textContent = `Last sync: ${new Date().toLocaleString()}`;
+                    return true;
+                } else if (response.status === 404) {
+                    // File doesn't exist yet, create it
+                    const initialData = {
+                        link: '',
+                        lastUpdated: new Date().toISOString()
+                    };
+                    
+                    const createResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.filePath}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${config.githubToken}`,
+                            'Accept': 'application/vnd.github.v3+json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: 'Initialize LiveShare data file',
+                            content: btoa(JSON.stringify(initialData, null, 2)),
+                            branch: 'main'
+                        })
+                    });
+                    
+                    if (createResponse.ok) {
+                        statusIndicator.className = 'connected';
+                        statusText.textContent = 'Created data file in repository';
+                        localStorage.setItem('lastSyncTime', new Date().toISOString());
+                        lastSyncTime.textContent = `Last sync: ${new Date().toLocaleString()}`;
+                        return true;
+                    } else {
+                        const error = await createResponse.json();
+                        statusIndicator.className = 'error';
+                        statusText.textContent = `Error creating file: ${error.message}`;
+                        return false;
+                    }
+                } else {
+                    const error = await response.json();
+                    statusIndicator.className = 'error';
+                    statusText.textContent = `Connection error: ${error.message}`;
+                    return false;
+                }
+            } catch (error) {
+                statusIndicator.className = 'error';
+                statusText.textContent = `Connection error: ${error.message}`;
+                return false;
+            }
+        }
+        
+        // Fetch the LiveShare link from the repository
+        async function fetchLiveShareLink() {
+            if (!config.repoOwner || !config.repoName || !config.githubToken) {
+                currentLinkDisplay.textContent = 'Configuration not set up';
+                return null;
+            }
+            
+            currentLinkDisplay.textContent = 'Fetching latest session link...';
+            
+            try {
+                const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.filePath}`, {
+                    headers: {
+                        'Authorization': `token ${config.githubToken}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const content = JSON.parse(atob(data.content));
+                    
+                    // Update UI with fetched link
+                    if (content.link) {
+                        // Display the link (shortened for display)
+                        if (content.link.length > 60) {
+                            currentLinkDisplay.textContent = content.link.substring(0, 60) + '...';
+                        } else {
+                            currentLinkDisplay.textContent = content.link;
+                        }
+                        
+                        // Set the join button
+                        joinButton.href = content.link;
+                        joinButton.style.display = 'inline-block';
+                        
+                        // Show copy button
+                        copyButton.style.display = 'inline-block';
+                        
+                        // Update timestamp
+                        if (content.lastUpdated) {
+                            const date = new Date(content.lastUpdated);
+                            updateTimeDisplay.textContent = `Last updated: ${date.toLocaleString()}`;
+                        }
+                        
+                        lastSyncTime.textContent = `Last sync: ${new Date().toLocaleString()}`;
+                        localStorage.setItem('lastSyncTime', new Date().toISOString());
+                        
+                        return content;
+                    } else {
+                        currentLinkDisplay.textContent = 'No active session available';
+                        joinButton.style.display = 'none';
+                        copyButton.style.display = 'none';
+                        updateTimeDisplay.textContent = '';
+                        return null;
+                    }
+                } else {
+                    currentLinkDisplay.textContent = 'Error fetching session link';
+                    return null;
+                }
+            } catch (error) {
+                currentLinkDisplay.textContent = `Error: ${error.message}`;
+                return null;
+            }
+        }
+        
+        // Update the LiveShare link in the repository
+        async function updateLiveShareLink() {
+            const newLink = newLinkInput.value.trim();
+            
+            if (!newLink) {
+                showNotification('Please enter a LiveShare link', true);
+                return;
+            }
+            
+            if (!newLink.includes('liveshare.vsengsaas.visualstudio.com')) {
+                showNotification('This doesn\'t appear to be a valid LiveShare link', true);
+                return;
+            }
+            
+            if (!config.repoOwner || !config.repoName || !config.githubToken) {
+                showNotification('Repository configuration not set up', true);
+                return;
+            }
+            
+            // Show loading indicator
+            loadingIndicator.style.display = 'inline-block';
+            updateButton.disabled = true;
+            
+            try {
+                // First, get the current file to get its SHA
+                const getResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.filePath}`, {
+                    headers: {
+                        'Authorization': `token ${config.githubToken}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                
+                let sha = '';
+                if (getResponse.ok) {
+                    const data = await getResponse.json();
+                    sha = data.sha;
+                } else if (getResponse.status !== 404) {
+                    const error = await getResponse.json();
+                    throw new Error(error.message);
+                }
+                
+                // Prepare the updated content
+                const updatedData = {
+                    link: newLink,
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                // Create or update the file
+                const updateResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${config.filePath}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${config.githubToken}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Update LiveShare link',
+                        content: btoa(JSON.stringify(updatedData, null, 2)),
+                        sha: sha || undefined,
+                        branch: 'main'
+                    })
+                });
+                
+                if (updateResponse.ok) {
+                    // Success! Update the UI
+                    showNotification('LiveShare link updated successfully!');
+                    newLinkInput.value = '';
+                    fetchLiveShareLink();
+                } else {
+                    const error = await updateResponse.json();
+                    showNotification(`Error updating link: ${error.message}`, true);
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, true);
+            } finally {
+                // Hide loading indicator
+                loadingIndicator.style.display = 'none';
+                updateButton.disabled = false;
+            }
+        }
+        
+        // Copy link to clipboard
+        function copyLinkToClipboard() {
+            const linkText = joinButton.href;
+            
+            if (linkText) {
+                navigator.clipboard.writeText(linkText)
+                    .then(() => {
+                        showNotification('Link copied to clipboard!');
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                        showNotification('Failed to copy link to clipboard', true);
+                    });
+            }
+        }
+        
+        // Event Listeners
+        setupConfigButton.addEventListener('click', () => {
+            setupContainer.style.display = setupContainer.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        saveConfigButton.addEventListener('click', () => {
+            saveConfig();
+        });
+        
+        updateButton.addEventListener('click', updateLiveShareLink);
+        
+        copyButton.addEventListener('click', copyLinkToClipboard);
+        
+        refreshButton.addEventListener('click', fetchLiveShareLink);
+        
+        // For quick updating - detect paste when focusing the input
+        newLinkInput.addEventListener('paste', (event) => {
+            // Wait for the paste to complete
+            setTimeout(() => {
+                if (newLinkInput.value.includes('liveshare.vsengsaas.visualstudio.com')) {
+                    updateLiveShareLink();
+                }
+            }, 100);
+        });
+        
+        // Initialize the page
+        async function initialize() {
+            const configLoaded = loadConfig();
+            
+            if (configLoaded) {
+                const connectionOk = await checkRepositoryConnection();
+                if (connectionOk) {
+                    fetchLiveShareLink();
+                }
+            } else {
+                // Show setup container if no configuration exists
+                setupContainer.style.display = 'block';
+                statusIndicator.className = 'error';
+                statusText.textContent = 'Configuration needed';
+                currentLinkDisplay.textContent = 'Please set up repository configuration first';
+            }
+            
+            // Set up auto-refresh every 30 seconds
+            setInterval(fetchLiveShareLink, 30000);
+        }
+        
+        // Start the application
+        initialize();
+    </script>
+</body>
+</html>
